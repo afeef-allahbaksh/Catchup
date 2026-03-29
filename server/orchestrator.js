@@ -1,18 +1,30 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { tools, executeTool, getDisplayName } from "./tools/index.js";
+import { getAllThreads } from "./data/threads.js";
 
 const client = new Anthropic();
 
-const SYSTEM_PROMPT = `You are Catchup, an AI assistant that helps users understand and respond to messaging threads from Slack and Teams.
+function buildSystemPrompt() {
+  const threads = getAllThreads();
+  const threadList = threads
+    .map((t) => `- "${t.id}" — ${t.topic} (${t.channel}, ${t.messages.length} messages)`)
+    .join("\n");
+
+  return `You are Catchup, an AI assistant that helps users understand and respond to messaging threads from Slack and Teams.
 
 You have access to tools that let you summarize threads, draft replies, extract action items, and search across threads. Use them whenever they would help answer the user's question.
 
+Available threads:
+${threadList}
+
 When using tools:
+- Use the thread IDs listed above when calling tools that require a thread_id
 - Call multiple tools in parallel when they are independent
 - After receiving tool results, synthesize them into a clear, helpful response
 - If a search returns no results, say so honestly
 
 Keep responses concise and actionable.`;
+}
 
 export async function handleChat(messages, callbacks) {
   // Convert frontend messages to Claude format
@@ -26,7 +38,7 @@ export async function handleChat(messages, callbacks) {
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(),
       tools,
       messages: claudeMessages,
     });
