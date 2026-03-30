@@ -23,12 +23,12 @@ app.post("/api/chat", async (req, res) => {
 
   try {
     await handleChat(messages, {
-      onToolUse(name, input, displayName) {
-        res.write(`data: ${JSON.stringify({ type: "tool_use", name, input, displayName })}\n\n`);
+      onToolUse(id, name, input, displayName) {
+        res.write(`data: ${JSON.stringify({ type: "tool_use", id, name, input, displayName })}\n\n`);
       },
-      onToolResult(name, result) {
+      onToolResult(id, name, result) {
         res.write(
-          `data: ${JSON.stringify({ type: "tool_result", name, result })}\n\n`
+          `data: ${JSON.stringify({ type: "tool_result", id, name, result })}\n\n`
         );
       },
       onText(content) {
