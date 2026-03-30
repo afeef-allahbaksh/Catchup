@@ -90,23 +90,26 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ```
 catchup/
+├── api/
+│   └── chat.js            # Vercel serverless function
 ├── client/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── ChatWindow.jsx
-│   │   │   ├── MessageBubble.jsx
-│   │   │   └── ThreadPanel.jsx
-│   │   └── App.jsx
+│   └── src/
+│       ├── components/
+│       │   ├── ChatWindow.jsx
+│       │   └── MessageBubble.jsx
+│       └── App.jsx
 ├── server/
-│   ├── index.js          # Express server
-│   ├── orchestrator.js   # Manages context + agent loop
+│   ├── index.js           # Express server (local dev)
+│   ├── orchestrator.js    # Manages context + agent loop
 │   ├── tools/
+│   │   ├── index.js       # Tool registry
 │   │   ├── summarize.js
 │   │   ├── draftReply.js
 │   │   ├── actionItems.js
 │   │   └── search.js
 │   └── data/
-│       └── threads.js    # Mock thread data
+│       └── threads.js     # Mock thread data
+├── vercel.json
 └── .env.example
 ```
 
