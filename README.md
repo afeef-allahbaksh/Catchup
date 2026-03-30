@@ -6,11 +6,11 @@ An agentic AI assistant for messaging threads. Paste in a Slack or Teams convers
 
 ## Live Demo
 
-[catchup.vercel.app](https://catchup.vercel.app) <!-- update once deployed -->
+[catchup.vercel.app](https://catchup-black.vercel.app) 
 
 ## What it does
 
-Catchup uses an agentic loop where the AI can call multiple tools in sequence before returning a final response — the same pattern used in production messaging AI systems. You ask a question in natural language, and the agent decides which tools to call, in what order, to answer it.
+Catchup uses an agentic loop where the AI can call multiple tools in sequence before returning a final response, the same pattern used in production messaging AI systems. You ask a question in natural language, and the agent decides which tools to call, in what order, to answer it.
 
 **Available tools:**
 
