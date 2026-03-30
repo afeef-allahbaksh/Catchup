@@ -30,6 +30,7 @@ export function handler({ thread_id }) {
   return {
     thread_id,
     channel: thread.channel,
+    message_count: thread.messages.length,
     participants: [...new Set(thread.messages.map((m) => m.author))],
     messages,
   };

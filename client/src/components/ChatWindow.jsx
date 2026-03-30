@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import MessageBubble from "./MessageBubble";
 
-export default function ChatWindow({ onThreadsLoaded }) {
+export default function ChatWindow() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -67,6 +67,7 @@ export default function ChatWindow({ onThreadsLoaded }) {
               assistant.toolCalls = [
                 ...assistant.toolCalls,
                 {
+                  id: event.id,
                   name: event.name,
                   displayName: event.displayName,
                   input: event.input,
@@ -75,7 +76,7 @@ export default function ChatWindow({ onThreadsLoaded }) {
               ];
             } else if (event.type === "tool_result") {
               assistant.toolCalls = assistant.toolCalls.map((tc) =>
-                tc.name === event.name && tc.result === null
+                tc.id === event.id
                   ? { ...tc, result: event.result }
                   : tc
               );

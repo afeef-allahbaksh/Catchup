@@ -33,12 +33,14 @@ export async function handleChat(messages, callbacks) {
     content: m.content,
   }));
 
+  const systemPrompt = buildSystemPrompt();
+
   // Agent loop: keep calling Claude until we get a text-only response
   while (true) {
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 4096,
-      system: buildSystemPrompt(),
+      system: systemPrompt,
       tools,
       messages: claudeMessages,
     });
@@ -61,14 +63,14 @@ export async function handleChat(messages, callbacks) {
 
     // Notify UI about each tool being called
     for (const toolUse of toolUseBlocks) {
-      callbacks.onToolUse(toolUse.name, toolUse.input, getDisplayName(toolUse.name));
+      callbacks.onToolUse(toolUse.id, toolUse.name, toolUse.input, getDisplayName(toolUse.name));
     }
 
     // Execute all tool calls in parallel
     const toolResults = await Promise.all(
       toolUseBlocks.map(async (toolUse) => {
         const result = await executeTool(toolUse.name, toolUse.input);
-        callbacks.onToolResult(toolUse.name, result);
+        callbacks.onToolResult(toolUse.id, toolUse.name, result);
         return {
           type: "tool_result",
           tool_use_id: toolUse.id,
