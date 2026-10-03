@@ -1,8 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { client, MODEL } from "./llm.js";
 import { tools, executeTool, getDisplayName } from "./tools/index.js";
 import { getAllThreads } from "./data/threads.js";
 
-const client = new Anthropic();
+const MAX_TURNS = 8;
+// Benchmark-only switch to compare against one-at-a-time tool execution.
+const SEQUENTIAL_TOOLS = process.env.ORCH_SEQUENTIAL === "1";
 
 function buildSystemPrompt() {
   const threads = getAllThreads();
@@ -26,66 +28,76 @@ When using tools:
 Keep responses concise and actionable.`;
 }
 
-export async function handleChat(messages, callbacks) {
-  // Convert frontend messages to Claude format
-  const claudeMessages = messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+// Executes one tool call. Failures become is_error results so Claude can recover
+// instead of the whole turn failing; only a client abort propagates.
+async function runTool(toolUse, callbacks, signal) {
+  let result;
+  let isError = false;
+  try {
+    result = await executeTool(toolUse.name, toolUse.input, { signal });
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    result = { error: err.message };
+    isError = true;
+  }
+  callbacks.onToolResult(toolUse.id, toolUse.name, result);
+  return {
+    type: "tool_result",
+    tool_use_id: toolUse.id,
+    content: JSON.stringify(result),
+    ...(isError && { is_error: true }),
+  };
+}
 
+async function runTools(toolUseBlocks, callbacks, signal) {
+  if (!SEQUENTIAL_TOOLS) {
+    return Promise.all(toolUseBlocks.map((t) => runTool(t, callbacks, signal)));
+  }
+  const results = [];
+  for (const toolUse of toolUseBlocks) {
+    results.push(await runTool(toolUse, callbacks, signal));
+  }
+  return results;
+}
+
+// Runs the agent loop over `history` (Claude-format messages ending in a user turn),
+// appending every assistant and tool-result turn to it in place.
+export async function handleChat(history, callbacks, { signal } = {}) {
   const systemPrompt = buildSystemPrompt();
+  let wroteText = false;
 
-  // Agent loop: keep calling Claude until we get a text-only response
-  while (true) {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: systemPrompt,
-      tools,
-      messages: claudeMessages,
+  for (let turn = 0; turn < MAX_TURNS; turn++) {
+    let turnHasText = false;
+    const stream = client.messages.stream(
+      {
+        model: MODEL,
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools,
+        messages: history,
+      },
+      { signal }
+    );
+    stream.on("text", (delta) => {
+      // Separate text from earlier turns (e.g. "Let me check...") from this turn's text
+      if (!turnHasText && wroteText) delta = `\n\n${delta}`;
+      turnHasText = wroteText = true;
+      callbacks.onText(delta);
     });
+    const response = await stream.finalMessage();
 
-    // Separate tool use blocks from text blocks
-    const toolUseBlocks = response.content.filter(
-      (block) => block.type === "tool_use"
-    );
-    const textBlocks = response.content.filter(
-      (block) => block.type === "text"
-    );
+    history.push({ role: "assistant", content: response.content });
 
-    // If no tool calls, stream the final text and exit the loop
-    if (toolUseBlocks.length === 0) {
-      for (const block of textBlocks) {
-        callbacks.onText(block.text);
-      }
-      break;
-    }
+    const toolUseBlocks = response.content.filter((block) => block.type === "tool_use");
+    if (toolUseBlocks.length === 0) return;
 
-    // Notify UI about each tool being called
     for (const toolUse of toolUseBlocks) {
       callbacks.onToolUse(toolUse.id, toolUse.name, toolUse.input, getDisplayName(toolUse.name));
     }
 
-    // Execute all tool calls in parallel
-    const toolResults = await Promise.all(
-      toolUseBlocks.map(async (toolUse) => {
-        const result = await executeTool(toolUse.name, toolUse.input);
-        callbacks.onToolResult(toolUse.id, toolUse.name, result);
-        return {
-          type: "tool_result",
-          tool_use_id: toolUse.id,
-          content: JSON.stringify(result),
-        };
-      })
-    );
-
-    // Also stream any text that came alongside tool calls
-    for (const block of textBlocks) {
-      callbacks.onText(block.text);
-    }
-
-    // Append assistant response and tool results, then loop
-    claudeMessages.push({ role: "assistant", content: response.content });
-    claudeMessages.push({ role: "user", content: toolResults });
+    const toolResults = await runTools(toolUseBlocks, callbacks, signal);
+    history.push({ role: "user", content: toolResults });
   }
+
+  throw new Error(`Agent loop stopped after ${MAX_TURNS} turns without a final answer`);
 }

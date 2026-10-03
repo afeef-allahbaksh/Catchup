@@ -1,4 +1,5 @@
 import { getThread } from "../data/threads.js";
+import { analyzeThread, threadInfo } from "./analyze.js";
 
 export const definition = {
   name: "summarize_thread",
@@ -17,21 +18,17 @@ export const definition = {
   },
 };
 
-export function handler({ thread_id }) {
+export async function handler({ thread_id }, { signal } = {}) {
   const thread = getThread(thread_id);
   if (!thread) {
     return { error: `Thread "${thread_id}" not found` };
   }
 
-  const messages = thread.messages.map(
-    (m) => `[${m.timestamp}] ${m.author}: ${m.text}`
+  const summary = await analyzeThread(
+    thread,
+    "Summarize this messaging thread in 3-6 concise bullet points covering decisions, open questions, and blockers. Output only the bullets.",
+    { signal }
   );
 
-  return {
-    thread_id,
-    channel: thread.channel,
-    message_count: thread.messages.length,
-    participants: [...new Set(thread.messages.map((m) => m.author))],
-    messages,
-  };
+  return { ...threadInfo(thread), message_count: thread.messages.length, summary };
 }

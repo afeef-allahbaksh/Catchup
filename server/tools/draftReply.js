@@ -1,4 +1,5 @@
 import { getThread } from "../data/threads.js";
+import { analyzeThread, threadInfo } from "./analyze.js";
 
 export const definition = {
   name: "draft_reply",
@@ -22,21 +23,18 @@ export const definition = {
   },
 };
 
-export function handler({ thread_id, intent }) {
+export async function handler({ thread_id, intent }, { signal } = {}) {
   const thread = getThread(thread_id);
   if (!thread) {
     return { error: `Thread "${thread_id}" not found` };
   }
 
-  const messages = thread.messages.map(
-    (m) => `[${m.timestamp}] ${m.author}: ${m.text}`
+  const goal = intent ? `The reply should: ${intent}.` : "Infer the most useful reply from the conversation.";
+  const draft = await analyzeThread(
+    thread,
+    `Draft a short, natural reply to post in this messaging thread. ${goal} Output only the reply text.`,
+    { signal }
   );
 
-  return {
-    thread_id,
-    channel: thread.channel,
-    participants: [...new Set(thread.messages.map((m) => m.author))],
-    intent: intent || "Infer from context",
-    messages,
-  };
+  return { ...threadInfo(thread), intent: intent || "Inferred from context", draft };
 }

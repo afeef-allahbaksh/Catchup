@@ -1,6 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import MessageBubble from "./MessageBubble";
 
+// Conversation history lives on the server, keyed by this per-tab session ID
+function getSessionId() {
+  let id = sessionStorage.getItem("catchup-session-id");
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem("catchup-session-id", id);
+  }
+  return id;
+}
+
 export default function ChatWindow() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -33,12 +43,15 @@ export default function ChatWindow() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: updatedMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          sessionId: getSessionId(),
+          message: userMessage.content,
         }),
       });
+
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({}));
+        throw new Error(error || `Request failed (${res.status})`);
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
