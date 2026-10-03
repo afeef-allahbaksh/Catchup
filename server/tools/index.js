@@ -18,10 +18,30 @@ const toolMap = Object.fromEntries(
   registry.map((t) => [t.name, { handler: t.handler, displayName: t.displayName }])
 );
 
-export async function executeTool(name, input) {
+const TOOL_TIMEOUT_MS = Number(process.env.TOOL_TIMEOUT_MS) || 15000;
+
+// Runs a tool with a per-call deadline. The handler gets a signal that fires on
+// timeout or when the parent request is aborted, so in-flight API calls are cancelled.
+export async function executeTool(name, input, { signal } = {}) {
   const tool = toolMap[name];
   if (!tool) throw new Error(`Unknown tool: ${name}`);
-  return tool.handler(input);
+
+  const timeout = AbortSignal.timeout(TOOL_TIMEOUT_MS);
+  const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  combined.throwIfAborted();
+
+  const aborted = new Promise((_, reject) => {
+    combined.addEventListener(
+      "abort",
+      () =>
+        reject(
+          timeout.aborted ? new Error(`${name} timed out after ${TOOL_TIMEOUT_MS}ms`) : combined.reason
+        ),
+      { once: true }
+    );
+  });
+
+  return Promise.race([tool.handler(input, { signal: combined }), aborted]);
 }
 
 export function getDisplayName(name) {

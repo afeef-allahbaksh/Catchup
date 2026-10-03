@@ -1,4 +1,5 @@
 import { getThread } from "../data/threads.js";
+import { analyzeThread, threadInfo } from "./analyze.js";
 
 export const definition = {
   name: "extract_action_items",
@@ -17,21 +18,17 @@ export const definition = {
   },
 };
 
-export function handler({ thread_id }) {
+export async function handler({ thread_id }, { signal } = {}) {
   const thread = getThread(thread_id);
   if (!thread) {
     return { error: `Thread "${thread_id}" not found` };
   }
 
-  const messages = thread.messages.map(
-    (m) => `[${m.timestamp}] ${m.author}: ${m.text}`
+  const action_items = await analyzeThread(
+    thread,
+    "Extract every action item from this messaging thread as a markdown list. For each item give the task, the owner, and the deadline (or \"no deadline\"). Output only the list.",
+    { signal }
   );
 
-  return {
-    thread_id,
-    channel: thread.channel,
-    message_count: thread.messages.length,
-    participants: [...new Set(thread.messages.map((m) => m.author))],
-    messages,
-  };
+  return { ...threadInfo(thread), message_count: thread.messages.length, action_items };
 }
